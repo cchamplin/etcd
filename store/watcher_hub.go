@@ -56,7 +56,7 @@ func newWatchHub(capacity int) *watcherHub {
 // If recursive is true, the first change after index under key will be sent to the event channel of the watcher.
 // If recursive is false, the first change after index at key will be sent to the event channel of the watcher.
 // If index is zero, watch will start from the current index + 1.
-func (wh *watcherHub) watch(key string, recursive, stream bool, index, storeIndex uint64) (Watcher, *etcdErr.Error) {
+func (wh *watcherHub) watch(key string, recursive, stream bool, index uint64, filter string, level, storeIndex uint64) (Watcher, *etcdErr.Error) {
 	reportWatchRequest()
 	event, err := wh.EventHistory.scan(key, recursive, index)
 
@@ -64,13 +64,18 @@ func (wh *watcherHub) watch(key string, recursive, stream bool, index, storeInde
 		err.Index = storeIndex
 		return nil, err
 	}
-
+	var filterParts []string
+	if filter != "" {
+		filterParts = strings.Split(filter, ",")
+	}
 	w := &watcher{
 		eventChan:  make(chan *Event, 100), // use a buffered channel
 		recursive:  recursive,
 		stream:     stream,
 		sinceIndex: index,
 		startIndex: storeIndex,
+		filter:     filterParts,
+		level:      level,
 		hub:        wh,
 	}
 
@@ -147,7 +152,28 @@ func (wh *watcherHub) notifyWatchers(e *Event, nodePath string, deleted bool) {
 			w, _ := curr.Value.(*watcher)
 
 			originalPath := (e.Node.Key == nodePath)
-			if (originalPath || !isHidden(nodePath, e.Node.Key)) && w.notify(e, originalPath, deleted) {
+
+			inLevel := true
+			if w.level > 0 {
+				subpath := e.Node.Key[len(nodePath):]
+				if uint64(strings.Count(subpath, "/")) > w.level {
+					inLevel = false
+				}
+			}
+			var inFilter bool
+			if len(w.filter) == 0 {
+				inFilter = true
+			} else {
+				inFilter = false
+				for _, val := range w.filter {
+					if strings.ToLower(e.Action) == strings.ToLower(strings.TrimSpace(val)) {
+						inFilter = true
+						break
+					}
+				}
+			}
+
+			if (originalPath || !isHidden(nodePath, e.Node.Key)) && (inFilter && inLevel) && w.notify(e, originalPath, deleted) {
 				if !w.stream { // do not remove the stream watcher
 					// if we successfully notify a watcher
 					// we need to remove the watcher from the list

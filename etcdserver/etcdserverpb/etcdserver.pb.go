@@ -7,8 +7,6 @@
 
 	It is generated from these files:
 		etcdserver.proto
-		raft_internal.proto
-		rpc.proto
 
 	It has these top-level messages:
 		Request
@@ -45,6 +43,8 @@ type Request struct {
 	Quorum           bool   `protobuf:"varint,14,opt" json:"Quorum"`
 	Time             int64  `protobuf:"varint,15,opt" json:"Time"`
 	Stream           bool   `protobuf:"varint,16,opt" json:"Stream"`
+	Filter           string `protobuf:"bytes,17,opt" json:"Filter"`
+	Level            uint64 `protobuf:"varint,18,opt" json:"Level"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -168,6 +168,17 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
+	data[i] = 0x8a
+	i++
+	data[i] = 0x1
+	i++
+	i = encodeVarintEtcdserver(data, i, uint64(len(m.Filter)))
+	i += copy(data[i:], m.Filter)
+	data[i] = 0x90
+	i++
+	data[i] = 0x1
+	i++
+	i = encodeVarintEtcdserver(data, i, uint64(m.Level))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -253,6 +264,9 @@ func (m *Request) Size() (n int) {
 	n += 2
 	n += 1 + sovEtcdserver(uint64(m.Time))
 	n += 3
+	l = len(m.Filter)
+	n += 2 + l + sovEtcdserver(uint64(l))
+	n += 2 + sovEtcdserver(uint64(m.Level))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -606,6 +620,48 @@ func (m *Request) Unmarshal(data []byte) error {
 				}
 			}
 			m.Stream = bool(v != 0)
+		case 17:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Filter", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthEtcdserver
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Filter = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 18:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Level", wireType)
+			}
+			m.Level = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Level |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {

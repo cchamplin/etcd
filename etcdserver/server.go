@@ -567,7 +567,7 @@ func (s *EtcdServer) Do(ctx context.Context, r pb.Request) (Response, error) {
 	case "GET":
 		switch {
 		case r.Wait:
-			wc, err := s.store.Watch(r.Path, r.Recursive, r.Stream, r.Since)
+			wc, err := s.store.Watch(r.Path, r.Recursive, r.Stream, r.Since, r.Filter, r.Level)
 			if err != nil {
 				return Response{}, err
 			}

@@ -612,7 +612,7 @@ func TestStoreCompareAndSwapPrevIndexFailsIfNotMatch(t *testing.T) {
 func TestStoreWatchCreate(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 0
-	w, _ := s.Watch("/foo", false, false, 0)
+	w, _ := s.Watch("/foo", false, false, 0, "", 0)
 	c := w.EventChan()
 	assert.Equal(t, w.StartIndex(), eidx, "")
 	s.Create("/foo", false, "bar", false, Permanent)
@@ -629,7 +629,7 @@ func TestStoreWatchCreate(t *testing.T) {
 func TestStoreWatchRecursiveCreate(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 0
-	w, _ := s.Watch("/foo", true, false, 0)
+	w, _ := s.Watch("/foo", true, false, 0, "", 0)
 	assert.Equal(t, w.StartIndex(), eidx, "")
 	eidx = 1
 	s.Create("/foo/bar", false, "baz", false, Permanent)
@@ -644,7 +644,7 @@ func TestStoreWatchUpdate(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 1
 	s.Create("/foo", false, "bar", false, Permanent)
-	w, _ := s.Watch("/foo", false, false, 0)
+	w, _ := s.Watch("/foo", false, false, 0, "", 0)
 	assert.Equal(t, w.StartIndex(), eidx, "")
 	eidx = 2
 	s.Update("/foo", "baz", Permanent)
@@ -659,7 +659,7 @@ func TestStoreWatchRecursiveUpdate(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 1
 	s.Create("/foo/bar", false, "baz", false, Permanent)
-	w, _ := s.Watch("/foo", true, false, 0)
+	w, _ := s.Watch("/foo", true, false, 0, "", 0)
 	assert.Equal(t, w.StartIndex(), eidx, "")
 	eidx = 2
 	s.Update("/foo/bar", "baz", Permanent)
@@ -674,7 +674,7 @@ func TestStoreWatchDelete(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 1
 	s.Create("/foo", false, "bar", false, Permanent)
-	w, _ := s.Watch("/foo", false, false, 0)
+	w, _ := s.Watch("/foo", false, false, 0, "", 0)
 	assert.Equal(t, w.StartIndex(), eidx, "")
 	eidx = 2
 	s.Delete("/foo", false, false)
@@ -689,7 +689,7 @@ func TestStoreWatchRecursiveDelete(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 1
 	s.Create("/foo/bar", false, "baz", false, Permanent)
-	w, _ := s.Watch("/foo", true, false, 0)
+	w, _ := s.Watch("/foo", true, false, 0, "", 0)
 	assert.Equal(t, w.StartIndex(), eidx, "")
 	eidx = 2
 	s.Delete("/foo/bar", false, false)
@@ -704,7 +704,7 @@ func TestStoreWatchCompareAndSwap(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 1
 	s.Create("/foo", false, "bar", false, Permanent)
-	w, _ := s.Watch("/foo", false, false, 0)
+	w, _ := s.Watch("/foo", false, false, 0, "", 0)
 	assert.Equal(t, w.StartIndex(), eidx, "")
 	eidx = 2
 	s.CompareAndSwap("/foo", "bar", 0, "baz", Permanent)
@@ -719,7 +719,7 @@ func TestStoreWatchRecursiveCompareAndSwap(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 1
 	s.Create("/foo/bar", false, "baz", false, Permanent)
-	w, _ := s.Watch("/foo", true, false, 0)
+	w, _ := s.Watch("/foo", true, false, 0, "", 0)
 	assert.Equal(t, w.StartIndex(), eidx, "")
 	eidx = 2
 	s.CompareAndSwap("/foo/bar", "baz", 0, "bat", Permanent)
@@ -739,7 +739,7 @@ func TestStoreWatchExpire(t *testing.T) {
 	s.Create("/foo", false, "bar", false, fc.Now().Add(500*time.Millisecond))
 	s.Create("/foofoo", false, "barbarbar", false, fc.Now().Add(500*time.Millisecond))
 
-	w, _ := s.Watch("/", true, false, 0)
+	w, _ := s.Watch("/", true, false, 0, "", 0)
 	assert.Equal(t, w.StartIndex(), eidx, "")
 	c := w.EventChan()
 	e := nbselect(c)
@@ -751,7 +751,7 @@ func TestStoreWatchExpire(t *testing.T) {
 	assert.Equal(t, e.EtcdIndex, eidx, "")
 	assert.Equal(t, e.Action, "expire", "")
 	assert.Equal(t, e.Node.Key, "/foo", "")
-	w, _ = s.Watch("/", true, false, 4)
+	w, _ = s.Watch("/", true, false, 0, "", 4)
 	eidx = 4
 	assert.Equal(t, w.StartIndex(), eidx, "")
 	e = nbselect(w.EventChan())
@@ -764,7 +764,7 @@ func TestStoreWatchExpire(t *testing.T) {
 func TestStoreWatchStream(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 1
-	w, _ := s.Watch("/foo", false, true, 0)
+	w, _ := s.Watch("/foo", false, true, 0, "", 0)
 	// first modification
 	s.Create("/foo", false, "bar", false, Permanent)
 	e := nbselect(w.EventChan())
@@ -849,7 +849,7 @@ func TestStoreRecoverWithExpiration(t *testing.T) {
 func TestStoreWatchCreateWithHiddenKey(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 1
-	w, _ := s.Watch("/_foo", false, false, 0)
+	w, _ := s.Watch("/_foo", false, false, 0, "", 0)
 	s.Create("/_foo", false, "bar", false, Permanent)
 	e := nbselect(w.EventChan())
 	assert.Equal(t, e.EtcdIndex, eidx, "")
@@ -862,11 +862,11 @@ func TestStoreWatchCreateWithHiddenKey(t *testing.T) {
 // Ensure that the store doesn't see hidden key creates without an exact path match in recursive mode.
 func TestStoreWatchRecursiveCreateWithHiddenKey(t *testing.T) {
 	s := newStore()
-	w, _ := s.Watch("/foo", true, false, 0)
+	w, _ := s.Watch("/foo", true, false, 0, "", 0)
 	s.Create("/foo/_bar", false, "baz", false, Permanent)
 	e := nbselect(w.EventChan())
 	assert.Nil(t, e, "")
-	w, _ = s.Watch("/foo", true, false, 0)
+	w, _ = s.Watch("/foo", true, false, 0, "", 0)
 	s.Create("/foo/_baz", true, "", false, Permanent)
 	e = nbselect(w.EventChan())
 	assert.Nil(t, e, "")
@@ -879,7 +879,7 @@ func TestStoreWatchRecursiveCreateWithHiddenKey(t *testing.T) {
 func TestStoreWatchUpdateWithHiddenKey(t *testing.T) {
 	s := newStore()
 	s.Create("/_foo", false, "bar", false, Permanent)
-	w, _ := s.Watch("/_foo", false, false, 0)
+	w, _ := s.Watch("/_foo", false, false, 0, "", 0)
 	s.Update("/_foo", "baz", Permanent)
 	e := nbselect(w.EventChan())
 	assert.Equal(t, e.Action, "update", "")
@@ -892,7 +892,7 @@ func TestStoreWatchUpdateWithHiddenKey(t *testing.T) {
 func TestStoreWatchRecursiveUpdateWithHiddenKey(t *testing.T) {
 	s := newStore()
 	s.Create("/foo/_bar", false, "baz", false, Permanent)
-	w, _ := s.Watch("/foo", true, false, 0)
+	w, _ := s.Watch("/foo", true, false, 0, "", 0)
 	s.Update("/foo/_bar", "baz", Permanent)
 	e := nbselect(w.EventChan())
 	assert.Nil(t, e, "")
@@ -903,7 +903,7 @@ func TestStoreWatchDeleteWithHiddenKey(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 2
 	s.Create("/_foo", false, "bar", false, Permanent)
-	w, _ := s.Watch("/_foo", false, false, 0)
+	w, _ := s.Watch("/_foo", false, false, 0, "", 0)
 	s.Delete("/_foo", false, false)
 	e := nbselect(w.EventChan())
 	assert.Equal(t, e.EtcdIndex, eidx, "")
@@ -917,7 +917,7 @@ func TestStoreWatchDeleteWithHiddenKey(t *testing.T) {
 func TestStoreWatchRecursiveDeleteWithHiddenKey(t *testing.T) {
 	s := newStore()
 	s.Create("/foo/_bar", false, "baz", false, Permanent)
-	w, _ := s.Watch("/foo", true, false, 0)
+	w, _ := s.Watch("/foo", true, false, 0, "", 0)
 	s.Delete("/foo/_bar", false, false)
 	e := nbselect(w.EventChan())
 	assert.Nil(t, e, "")
@@ -932,7 +932,7 @@ func TestStoreWatchExpireWithHiddenKey(t *testing.T) {
 	s.Create("/_foo", false, "bar", false, fc.Now().Add(500*time.Millisecond))
 	s.Create("/foofoo", false, "barbarbar", false, fc.Now().Add(1000*time.Millisecond))
 
-	w, _ := s.Watch("/", true, false, 0)
+	w, _ := s.Watch("/", true, false, 0, "", 0)
 	c := w.EventChan()
 	e := nbselect(c)
 	assert.Nil(t, e, "")
@@ -951,7 +951,7 @@ func TestStoreWatchExpireWithHiddenKey(t *testing.T) {
 func TestStoreWatchRecursiveCreateDeeperThanHiddenKey(t *testing.T) {
 	s := newStore()
 	var eidx uint64 = 1
-	w, _ := s.Watch("/_foo/bar", true, false, 0)
+	w, _ := s.Watch("/_foo/bar", true, false, 0, "", 0)
 	s.Create("/_foo/bar/baz", false, "baz", false, Permanent)
 
 	e := nbselect(w.EventChan())
@@ -970,10 +970,10 @@ func TestStoreWatchRecursiveCreateDeeperThanHiddenKey(t *testing.T) {
 // to operate correctly.
 func TestStoreWatchSlowConsumer(t *testing.T) {
 	s := newStore()
-	s.Watch("/foo", true, true, 0)       // stream must be true
-	s.Set("/foo", false, "1", Permanent) // ok
-	s.Set("/foo", false, "2", Permanent) // ok
-	s.Set("/foo", false, "3", Permanent) // must not panic
+	s.Watch("/foo", true, true, 0, "", 0) // stream must be true
+	s.Set("/foo", false, "1", Permanent)  // ok
+	s.Set("/foo", false, "2", Permanent)  // ok
+	s.Set("/foo", false, "3", Permanent)  // must not panic
 }
 
 // Performs a non-blocking select on an event channel.

@@ -107,7 +107,7 @@ func BenchmarkWatch(b *testing.B) {
 	runtime.ReadMemStats(memStats)
 
 	for i := 0; i < b.N; i++ {
-		w, _ := s.Watch(kvs[i][0], false, false, 0)
+		w, _ := s.Watch(kvs[i][0], false, false, 0, "", 0)
 
 		e := newEvent("set", kvs[i][0], uint64(i+1), uint64(i+1))
 		s.WatcherHub.notify(e)
@@ -130,7 +130,7 @@ func BenchmarkWatchWithSet(b *testing.B) {
 	b.StartTimer()
 
 	for i := 0; i < b.N; i++ {
-		w, _ := s.Watch(kvs[i][0], false, false, 0)
+		w, _ := s.Watch(kvs[i][0], false, false, 0, "", 0)
 
 		s.Set(kvs[i][0], false, "test", Permanent)
 		<-w.EventChan()
@@ -146,7 +146,7 @@ func BenchmarkWatchWithSetBatch(b *testing.B) {
 	watchers := make([]Watcher, b.N)
 
 	for i := 0; i < b.N; i++ {
-		watchers[i], _ = s.Watch(kvs[i][0], false, false, 0)
+		watchers[i], _ = s.Watch(kvs[i][0], false, false, 0, "", 0)
 	}
 
 	for i := 0; i < b.N; i++ {
@@ -164,7 +164,7 @@ func BenchmarkWatchOneKey(b *testing.B) {
 	watchers := make([]Watcher, b.N)
 
 	for i := 0; i < b.N; i++ {
-		watchers[i], _ = s.Watch("/foo", false, false, 0)
+		watchers[i], _ = s.Watch("/foo", false, false, 0, "", 0)
 	}
 
 	s.Set("/foo", false, "", Permanent)

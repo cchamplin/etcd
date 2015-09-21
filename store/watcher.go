@@ -28,6 +28,8 @@ type watcher struct {
 	startIndex uint64
 	hub        *watcherHub
 	removed    bool
+	filter     []string
+	level      uint64
 	remove     func()
 }
 

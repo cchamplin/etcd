@@ -25,6 +25,8 @@ message Request {
 	optional bool   Quorum     = 14 [(gogoproto.nullable) = false];
 	optional int64  Time       = 15 [(gogoproto.nullable) = false];
 	optional bool   Stream     = 16 [(gogoproto.nullable) = false];
+	optional string Filter     = 17 [(gogoproto.nullable) = false];
+	optional uint64 Level      = 18 [(gogoproto.nullable) = false];
 }
 
 message Metadata {

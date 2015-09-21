@@ -529,6 +529,26 @@ func parseKeyRequest(r *http.Request, clock clockwork.Clock) (etcdserverpb.Reque
 		pe = &bv
 	}
 
+	filter := r.FormValue("filter")
+	if _, ok := r.Form["filter"]; ok && filter == "" {
+		return emptyReq, etcdErr.NewRequestError(
+			etcdErr.EcodeInvalidField,
+			`invalid value for "filter"`,
+		)
+	}
+
+	var level uint64
+	if _, ok := r.Form["level"]; ok {
+		i, err := getUint64(r.Form, "level")
+		if err != nil {
+			return emptyReq, etcdErr.NewRequestError(
+				etcdErr.EcodeInvalidField,
+				"invalid value for level",
+			)
+		}
+		level = i
+	}
+
 	rr := etcdserverpb.Request{
 		Method:    r.Method,
 		Path:      p,
@@ -543,6 +563,8 @@ func parseKeyRequest(r *http.Request, clock clockwork.Clock) (etcdserverpb.Reque
 		Sorted:    sort,
 		Quorum:    quorum,
 		Stream:    stream,
+		Filter:    filter,
+		Level:     level,
 	}
 
 	if pe != nil {
