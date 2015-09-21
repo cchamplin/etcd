@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/etcd/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
 	"github.com/coreos/etcd/Godeps/_workspace/src/github.com/jonboulle/clockwork"
 	etcdErr "github.com/coreos/etcd/error"
 	"github.com/coreos/etcd/pkg/types"
@@ -42,12 +43,12 @@ type Store interface {
 	Index() uint64
 
 	Get(nodePath string, recursive, sorted bool) (*Event, error)
-	Set(nodePath string, dir bool, value string, expireTime time.Time) (*Event, error)
-	Update(nodePath string, newValue string, expireTime time.Time) (*Event, error)
+	Set(nodePath string, dir bool, value string, expireOpts TTLOptionSet) (*Event, error)
+	Update(nodePath string, newValue string, expireOpts TTLOptionSet) (*Event, error)
 	Create(nodePath string, dir bool, value string, unique bool,
-		expireTime time.Time) (*Event, error)
+		expireOpts TTLOptionSet) (*Event, error)
 	CompareAndSwap(nodePath string, prevValue string, prevIndex uint64,
-		value string, expireTime time.Time) (*Event, error)
+		value string, expireOpts TTLOptionSet) (*Event, error)
 	Delete(nodePath string, dir, recursive bool) (*Event, error)
 	CompareAndDelete(nodePath string, prevValue string, prevIndex uint64) (*Event, error)
 
@@ -61,6 +62,11 @@ type Store interface {
 
 	JsonStats() []byte
 	DeleteExpiredKeys(cutoff time.Time)
+}
+
+type TTLOptionSet struct {
+	ExpireTime time.Time
+	Refresh    bool
 }
 
 type store struct {
@@ -85,9 +91,9 @@ func New(namespaces ...string) Store {
 func newStore(namespaces ...string) *store {
 	s := new(store)
 	s.CurrentVersion = defaultVersion
-	s.Root = newDir(s, "/", s.CurrentIndex, nil, Permanent)
+	s.Root = newDir(s, "/", s.CurrentIndex, nil, Permanent.ExpireTime)
 	for _, namespace := range namespaces {
-		s.Root.Add(newDir(s, namespace, s.CurrentIndex, s.Root, Permanent))
+		s.Root.Add(newDir(s, namespace, s.CurrentIndex, s.Root, Permanent.ExpireTime))
 	}
 	s.Stats = newStats()
 	s.WatcherHub = newWatchHub(1000)
@@ -146,10 +152,10 @@ func (s *store) Get(nodePath string, recursive, sorted bool) (*Event, error) {
 // Create creates the node at nodePath. Create will help to create intermediate directories with no ttl.
 // If the node has already existed, create will fail.
 // If any node on the path is a file, create will fail.
-func (s *store) Create(nodePath string, dir bool, value string, unique bool, expireTime time.Time) (*Event, error) {
+func (s *store) Create(nodePath string, dir bool, value string, unique bool, expireOpts TTLOptionSet) (*Event, error) {
 	s.worldLock.Lock()
 	defer s.worldLock.Unlock()
-	e, err := s.internalCreate(nodePath, dir, value, unique, false, expireTime, Create)
+	e, err := s.internalCreate(nodePath, dir, value, unique, false, expireOpts.ExpireTime, Create)
 
 	if err == nil {
 		e.EtcdIndex = s.CurrentIndex
@@ -165,7 +171,7 @@ func (s *store) Create(nodePath string, dir bool, value string, unique bool, exp
 }
 
 // Set creates or replace the node at nodePath.
-func (s *store) Set(nodePath string, dir bool, value string, expireTime time.Time) (*Event, error) {
+func (s *store) Set(nodePath string, dir bool, value string, expireOpts TTLOptionSet) (*Event, error) {
 	var err error
 
 	s.worldLock.Lock()
@@ -188,8 +194,12 @@ func (s *store) Set(nodePath string, dir bool, value string, expireTime time.Tim
 		return nil, err
 	}
 
+	if expireOpts.Refresh && len(value) == 0 {
+		value = n.Value
+	}
+
 	// Set new value
-	e, err := s.internalCreate(nodePath, dir, value, false, true, expireTime, Set)
+	e, err := s.internalCreate(nodePath, dir, value, false, true, expireOpts.ExpireTime, Set)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +212,9 @@ func (s *store) Set(nodePath string, dir bool, value string, expireTime time.Tim
 		e.PrevNode = prev.Node
 	}
 
-	s.WatcherHub.notify(e)
+	if expireOpts.ExpireTime.IsZero() || !expireOpts.Refresh || ((getErr != nil && getErr.ErrorCode == etcdErr.EcodeKeyNotFound) || n.Value != value) {
+		s.WatcherHub.notify(e)
+	}
 
 	return e, nil
 }
@@ -220,7 +232,7 @@ func getCompareFailCause(n *node, which int, prevValue string, prevIndex uint64)
 }
 
 func (s *store) CompareAndSwap(nodePath string, prevValue string, prevIndex uint64,
-	value string, expireTime time.Time) (*Event, error) {
+	value string, expireOpts TTLOptionSet) (*Event, error) {
 
 	s.worldLock.Lock()
 	defer s.worldLock.Unlock()
@@ -264,14 +276,15 @@ func (s *store) CompareAndSwap(nodePath string, prevValue string, prevIndex uint
 
 	// if test succeed, write the value
 	n.Write(value, s.CurrentIndex)
-	n.UpdateTTL(expireTime)
+	n.UpdateTTL(expireOpts.ExpireTime)
 
 	// copy the value for safety
 	valueCopy := value
 	eNode.Value = &valueCopy
 	eNode.Expiration, eNode.TTL = n.expirationAndTTL(s.clock)
-
-	s.WatcherHub.notify(e)
+	if expireOpts.ExpireTime.IsZero() || !expireOpts.Refresh || prevValue != value {
+		s.WatcherHub.notify(e)
+	}
 	s.Stats.Inc(CompareAndSwapSuccess)
 	reportWriteSuccess(CompareAndSwap)
 
@@ -429,10 +442,12 @@ func (s *store) walk(nodePath string, walkFunc func(prev *node, component string
 	return curr, nil
 }
 
+var plog = capnslog.NewPackageLogger("github.com/coreos/etcd", "etcdserver")
+
 // Update updates the value/ttl of the node.
 // If the node is a file, the value and the ttl can be updated.
 // If the node is a directory, only the ttl can be updated.
-func (s *store) Update(nodePath string, newValue string, expireTime time.Time) (*Event, error) {
+func (s *store) Update(nodePath string, newValue string, expireOpts TTLOptionSet) (*Event, error) {
 	s.worldLock.Lock()
 	defer s.worldLock.Unlock()
 
@@ -450,6 +465,11 @@ func (s *store) Update(nodePath string, newValue string, expireTime time.Time) (
 		s.Stats.Inc(UpdateFail)
 		reportWriteFailure(Update)
 		return nil, err
+	}
+
+	oldValue := n.Value
+	if expireOpts.Refresh && len(newValue) == 0 {
+		newValue = oldValue
 	}
 
 	e := newEvent(Update, nodePath, nextIndex, n.CreatedIndex)
@@ -475,11 +495,17 @@ func (s *store) Update(nodePath string, newValue string, expireTime time.Time) (
 	}
 
 	// update ttl
-	n.UpdateTTL(expireTime)
+	n.UpdateTTL(expireOpts.ExpireTime)
 
 	eNode.Expiration, eNode.TTL = n.expirationAndTTL(s.clock)
 
-	s.WatcherHub.notify(e)
+	plog.Infof("refresh %v", expireOpts.Refresh)
+	plog.Infof("values %v : %v", oldValue, newValue)
+	if expireOpts.ExpireTime.IsZero() || !expireOpts.Refresh || oldValue != newValue {
+		plog.Infof("passed refresh %v", expireOpts.Refresh)
+		plog.Infof("passed values %v : %v", oldValue, newValue)
+		s.WatcherHub.notify(e)
+	}
 
 	s.Stats.Inc(UpdateSuccess)
 	reportWriteSuccess(Update)
@@ -508,7 +534,7 @@ func (s *store) internalCreate(nodePath string, dir bool, value string, unique, 
 	// Assume expire times that are way in the past are
 	// This can occur when the time is serialized to JS
 	if expireTime.Before(minExpireTime) {
-		expireTime = Permanent
+		expireTime = Permanent.ExpireTime
 	}
 
 	dirName, nodeName := path.Split(nodePath)
@@ -644,7 +670,7 @@ func (s *store) checkDir(parent *node, dirName string) (*node, *etcdErr.Error) {
 		return nil, etcdErr.NewError(etcdErr.EcodeNotDir, node.Path, s.CurrentIndex)
 	}
 
-	n := newDir(s, path.Join(parent.Path, dirName), s.CurrentIndex+1, parent, Permanent)
+	n := newDir(s, path.Join(parent.Path, dirName), s.CurrentIndex+1, parent, Permanent.ExpireTime)
 
 	parent.Children[dirName] = n
 

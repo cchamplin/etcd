@@ -104,7 +104,7 @@ func TestStoreStatsExpireCount(t *testing.T) {
 	fc := newFakeClock()
 	s.clock = fc
 
-	s.Create("/foo", false, "bar", false, fc.Now().Add(500*time.Millisecond))
+	s.Create("/foo", false, "bar", false, TTLOptionSet{ExpireTime: fc.Now().Add(500 * time.Millisecond)})
 	assert.Equal(t, uint64(0), s.Stats.ExpireCount, "")
 	fc.Advance(600 * time.Millisecond)
 	s.DeleteExpiredKeys(fc.Now())

@@ -529,6 +529,19 @@ func parseKeyRequest(r *http.Request, clock clockwork.Clock) (etcdserverpb.Reque
 		pe = &bv
 	}
 
+	// refresh is nullable, so leave it null if not specified
+	var refresh *bool
+	if _, ok := r.Form["refresh"]; ok {
+		bv, err := getBool(r.Form, "refresh")
+		if err != nil {
+			return emptyReq, etcdErr.NewRequestError(
+				etcdErr.EcodeInvalidField,
+				"invalid value for refresh",
+			)
+		}
+		refresh = &bv
+	}
+
 	rr := etcdserverpb.Request{
 		Method:    r.Method,
 		Path:      p,
@@ -547,6 +560,10 @@ func parseKeyRequest(r *http.Request, clock clockwork.Clock) (etcdserverpb.Reque
 
 	if pe != nil {
 		rr.PrevExist = pe
+	}
+
+	if refresh != nil {
+		rr.Refresh = *refresh
 	}
 
 	// Null TTL is equivalent to unset Expiration

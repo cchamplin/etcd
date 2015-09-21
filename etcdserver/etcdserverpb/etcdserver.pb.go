@@ -7,8 +7,6 @@
 
 	It is generated from these files:
 		etcdserver.proto
-		raft_internal.proto
-		rpc.proto
 
 	It has these top-level messages:
 		Request
@@ -45,6 +43,7 @@ type Request struct {
 	Quorum           bool   `protobuf:"varint,14,opt" json:"Quorum"`
 	Time             int64  `protobuf:"varint,15,opt" json:"Time"`
 	Stream           bool   `protobuf:"varint,16,opt" json:"Stream"`
+	Refresh          bool   `protobuf:"varint,17,opt" json:"Refresh"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -168,6 +167,16 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
+	data[i] = 0x88
+	i++
+	data[i] = 0x1
+	i++
+	if m.Refresh {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -252,6 +261,7 @@ func (m *Request) Size() (n int) {
 	n += 2
 	n += 2
 	n += 1 + sovEtcdserver(uint64(m.Time))
+	n += 3
 	n += 3
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -606,6 +616,23 @@ func (m *Request) Unmarshal(data []byte) error {
 				}
 			}
 			m.Stream = bool(v != 0)
+		case 17:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Refresh", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Refresh = bool(v != 0)
 		default:
 			var sizeOfWire int
 			for {

@@ -31,7 +31,7 @@ const (
 	CompareNotMatch      = 3
 )
 
-var Permanent time.Time
+var Permanent = TTLOptionSet{}
 
 // node is the basic element in the store system.
 // A key-value pair will have a string value
